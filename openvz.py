@@ -1,5 +1,5 @@
 #!/usr/bin/python
-
+# vim: ts=4 sw=4 et
 import tempfile
 import os.path
 
@@ -958,59 +958,66 @@ class Hypervisor(object):
         rc, stdout, stderr = self.module.run_command(command_line)
         if rc != 0:
             raise OpenVZKernelException("Cannot get the kernel version.")
-        else:
-            # Main regexp, just to filter the kernel and be sure it mentionned
-            #  openvz
-            regexp_kernel = '(?P<kernel>.+)-openvz-(?P<ovz_info>.*)$'
+
+        # Main regexp, just to filter the kernel and be sure it mentionned
+        #  openvz
+        regexp_kernel = '(?P<kernel>.+)-openvz-(?P<ovz_info>.*)$'
+        result = re.match(regexp_kernel, stdout)
+        if not result:
+            regexp_kernel = '(?P<kernel>.+)(-openvz\-|\.vz)(?P<ovz_info>.*)$'
             result = re.match(regexp_kernel, stdout)
-            if not result:
-                raise OpenVZKernelException(
-                    "The current kernel doesn't seems to be an OpenVZ one."
-                    "Current kernel : {0}".format(stdout)
-                )
-            else:
-                # It's an OpenVZ kernel, so getting the part after "-openvz-"
-                #  string
-                ovz_string = result.group('ovz_info')
-                linux_kernel = result.group('kernel')
-                kernel['linux_kernel'] = linux_kernel
+        if not result:
+            raise OpenVZKernelException(
+                "The current kernel doesn't seems to be an OpenVZ one."
+                "Current kernel : {0}".format(stdout)
+            )
+        # It's an OpenVZ kernel, so getting the part after "-openvz-"
+        #  string
+        ovz_string = result.group('ovz_info')
+        linux_kernel = result.group('kernel')
+        kernel['linux_kernel'] = linux_kernel
 
-                # if the string is equal to "amd64", then it's an old
-                #  OpenVZ kernel, issued from Debian 6 repository.
-                if ovz_string == "amd64":
-                    kernel['architecture'] = 'amd64'
-                else:
-                    # the rest of the uname string is not only "amd64",
-                    #  so it's most likely an OpenVZ kernel, issued from OpenVZ
-                    #  repositories.
-                    # See https://openvz.org/Kernel_versioning for information.
+        # if the string is equal to "amd64", then it's an old
+        #  OpenVZ kernel, issued from Debian 6 repository.
+        if ovz_string == "amd64":
+            kernel['architecture'] = 'amd64'
+            return kernel
 
-                    regexp_openvz = ('(?P<ovz_major_version>\d{3})'
-                                     '(?P<ovz_branch>stab|test)'
-                                     '(?P<ovz_minor_version>\d{3})\.'
-                                     '(?P<ovz_addon_number>\d)-'
-                                     '(?P<architecture>.*)$')
-                    result = re.match(regexp_openvz, ovz_string)
-                    if result:
-                        kernel['ovz_major_version'] = int(
-                            result.group('ovz_major_version')
-                        )
-                        kernel['ovz_branch'] = result.group('ovz_branch')
-                        kernel['ovz_minor_version'] = int(
-                            result.group('ovz_minor_version')
-                        )
-                        kernel['ovz_addon_number'] = int(
-                            result.group('ovz_addon_number')
-                        )
-                        kernel['architecture'] = result.group(
-                            'architecture'
-                        )
-                    else:
-                        raise OpenVZKernelException(
-                            "Cannot extract OpenVZ information from the"
-                            " kernel. Is is OpenVZ ?"
-                            " Current kernel : {0}".format(stdout)
-                        )
+        # the rest of the uname string is not only "amd64",
+        #  so it's most likely an OpenVZ kernel, issued from OpenVZ
+        #  repositories.
+        # See https://openvz.org/Kernel_versioning for information.
+
+        regexp_openvz = ('(?P<ovz_major_version>\d{3})'
+                         '(?P<ovz_branch>stab|test)'
+                         '(?P<ovz_minor_version>\d{3})\.'
+                         '(?P<ovz_addon_number>\d)-'
+                         '(?P<architecture>.*)$')
+        result = re.match(regexp_openvz, ovz_string)
+        if not result:
+            regexp_openvz = ('(?P<ovz_major_version>\d+)\.'
+                             '(?P<ovz_minor_version>\d+)\.'
+                             '(?P<ovz_addon_number>\d+)$')
+            result = re.match(regexp_openvz, ovz_string)
+        if not result:
+            raise OpenVZKernelException(
+                "Cannot extract OpenVZ information from the"
+                " kernel. Is is OpenVZ ?"
+                " Current kernel : {0}".format(stdout)
+            )
+        kernel['ovz_major_version'] = int(
+            result.group('ovz_major_version')
+        )
+        if 'ovz_branch' in result.groupdict().keys():
+            kernel['ovz_branch'] = result.group('ovz_branch')
+        kernel['ovz_minor_version'] = int(
+            result.group('ovz_minor_version')
+        )
+        kernel['ovz_addon_number'] = int(
+            result.group('ovz_addon_number')
+        )
+        if 'architecture' in result.groupdict().keys():
+            kernel['architecture'] = result.group('architecture')
         return kernel
 
     def is_ploop_available(self):
